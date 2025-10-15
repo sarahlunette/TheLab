@@ -5,6 +5,7 @@ Logs: Python logging
 LLM: Local Mistral (safetensors, v0.2)
 Docs store: ./docs (txt/md)
 RAG vectorstore: ./vectorstore/chroma
+Conversation Memory: LangChain ConversationBufferMemory
 
 Run:
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -16,6 +17,8 @@ import uuid
 import datetime
 import logging
 from pathlib import Path
+from collections import defaultdict
+
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import FileResponse
@@ -23,12 +26,18 @@ from pydantic import BaseModel
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from dotenv import load_dotenv
+
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
+
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core import StorageContext, VectorStoreIndex
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from chromadb import PersistentClient
+
+# 🧠 LangChain memory
+from langchain.memory import ConversationBufferMemory
+from langchain.schema import HumanMessage, AIMessage
 
 # -----------------
 # Load env vars
@@ -120,33 +129,60 @@ def query_knowledge_base(question: str) -> str:
     return context or "No relevant information found."
 
 # -----------------
-# Chat endpoint
+# Conversation memory
+# -----------------
+USER_MEMORIES = defaultdict(lambda: ConversationBufferMemory(return_messages=True))
+
+# -----------------
+# Chat endpoint with conversation memory
 # -----------------
 @app.post("/chat")
 def chat(request: ChatRequest, username: str = Depends(verify_credentials)):
-    input_text = request.question
-    rag_context = query_knowledge_base(input_text)
-    prompt = f"""
-You are an AI crisis assistant. Use the context below to answer concisely and factually.
+    input_text = request.question.strip()
 
-Context:
+    # Retrieve user-specific memory
+    memory = USER_MEMORIES[username]
+
+    # Retrieve RAG context
+    rag_context = query_knowledge_base(input_text)
+
+    # Build conversation history (last 5 messages)
+    history_text = "\n".join([
+        f"{msg.type.capitalize()}: {msg.content}"
+        for msg in memory.chat_memory.messages[-5:]
+    ])
+
+    # Construct prompt
+    prompt = f"""
+You are an AI crisis assistant. Use both the knowledge base context and the ongoing conversation to provide concise, factual, and context-aware responses.
+
+Knowledge Base Context:
 {rag_context}
 
-Question:
-{input_text}
+Conversation History:
+{history_text}
 
-Answer:
-"""
+User: {input_text}
+Assistant:
+""".strip()
+
+    # Generate response with Mistral
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
             max_new_tokens=256,
-            do_sample=False,
-            num_beams=1
+            temperature=0.7,
+            do_sample=True,
+            pad_token_id=tokenizer.eos_token_id,
         )
     answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
+    # Update memory
+    memory.chat_memory.add_user_message(input_text)
+    memory.chat_memory.add_ai_message(answer)
+
+    # Log
     ACTION_LOGS.append({
         'time': datetime.datetime.now().isoformat(),
         'username': username,
@@ -155,7 +191,27 @@ Answer:
         'answer': answer
     })
 
-    return {"answer": answer, "context_used": rag_context}
+    return {
+        "answer": answer,
+        "context_used": rag_context,
+        "conversation_turns": len(memory.chat_memory.messages) // 2
+    }
+
+# -----------------
+# Reset + History Endpoints
+# -----------------
+@app.delete("/chat/reset")
+def reset_chat(username: str = Depends(verify_credentials)):
+    USER_MEMORIES[username].clear()
+    return {"message": f"Conversation reset for {username}."}
+
+@app.get("/chat/history")
+def get_history(username: str = Depends(verify_credentials)):
+    memory = USER_MEMORIES[username]
+    return [
+        {"role": msg.type, "content": msg.content}
+        for msg in memory.chat_memory.messages
+    ]
 
 # -----------------
 # Plan generation endpoint
