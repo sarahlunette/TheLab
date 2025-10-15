@@ -9,6 +9,7 @@ PyMuPDF
 pandas
 geopandas
 shapely
+rasterio
 folium
 tqdm
 langchain_community
