@@ -1,4 +1,5 @@
 unstructured
+reportlab
 fastapi
 uvicorn
 python-docx
@@ -27,6 +28,9 @@ llama-index
 langchain_community
 langchain
 chromadb
+faiss-cpu
+vllm
+
 
 
 

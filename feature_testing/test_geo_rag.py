@@ -12,28 +12,33 @@ import faiss
 import numpy as np
 from openai import OpenAI
 from shapely.geometry import mapping
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # -------------------------
 # 2️⃣ Charger les données
 # -------------------------
-
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 # a) Tabulaire
-tabular = pd.read_csv("data/disaster_location/disaster_location_1960-2018.csv")
+tabular = pd.read_csv("../data/disaster_locations/disaster_location_1960-2018.csv")
 
 # b) Geo
-flood_zones = gpd.read_file("flood_zones.shp")
-population_zones = gpd.read_file("population_zones.shp")
+countries_boundaries = gpd.read_file("../data/countries_boundaries/ne_110m_admin_0_boundary_lines_land.shp")
+population_zones = gpd.read_file("../data/population_shp/JRC_POPULATION_2018.shp")
 
 # c) Raster
-raster = rasterio.open("C:\Users\sarah\Desktop\TheLab_\data\population\population_AF01_2018-10-01.tif")
+raster = rasterio.open("../data/population/population_AF01_2018-10-01.tif")
 
 # -------------------------
 # 3️⃣ Fusion spatiale & métriques
 # -------------------------
 
 # Jointure spatiale : population × zones inondables
-merged = gpd.sjoin(population_zones, flood_zones, how="inner", predicate="intersects")
-merged["population_exposed"] = merged["population"]  # exemple simple
+merged = gpd.sjoin(population_zones, countries_boundaries, how="inner", predicate="intersects")
+print(merged)
+# merged["population_exposed"] = merged["population"]  # exemple simple
 
 # Extraire valeur moyenne raster pour chaque polygone
 ndvi_means = []
@@ -45,12 +50,13 @@ merged["ndvi_mean"] = ndvi_means
 # -------------------------
 # 4️⃣ Résumer en JSON pour LLM
 # -------------------------
-insights_json = merged[["zone_name", "population", "population_exposed", "ndvi_mean"]].to_dict(orient="records")
+# insights_json = merged[["zone_name", "population", "population_exposed", "ndvi_mean"]].to_dict(orient="records")
+insights_json = merged.to_dict(orient="records")
 
 # -------------------------
 # 5️⃣ Embeddings et vector DB
 # -------------------------
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+embedder = SentenceTransformer("../models/all-MiniLM-L6-v2")
 documents = [str(record) for record in insights_json]
 embeddings = embedder.encode(documents)
 
@@ -69,7 +75,7 @@ results = [documents[i] for i in I[0]]
 # -------------------------
 # 7️⃣ LLM pour synthèse
 # -------------------------
-client = OpenAI(api_key="VOTRE_CLE_API")
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 context = "\n".join(results)
 prompt = f"""
