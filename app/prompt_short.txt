@@ -1,0 +1,13 @@
+    # Construct prompt
+    prompt = f"""
+You are an AI crisis assistant. Use both the knowledge base context and the ongoing conversation to provide concise, factual, and context-aware responses.
+
+Knowledge Base Context:
+{rag_context}
+
+Conversation History:
+{history_text}
+
+User: {input_text}
+Assistant:
+""".strip()
