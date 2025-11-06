@@ -1,0 +1,13 @@
+[] Adapt to LLM response (calling specific agent tools or using all the time the information)
+[] Look at todos in data
+[] In the functions a return object instead of print and main
+[] Use vllm (launch separately the LLM, )
+[] Neo4j graph rag
+[] Change for Claude (with credits)
+[] Some kpis on risks
+[] Zones inondables
+[] Zones accessibles
+[] Zones détruites
+[] tune the llm to know we are talking about one specific situation ? (we have assisted a cyclone)
+[] add alerts and replicas information (waves, cyclones)
+[] Two missing datasets on Joint Research Center Data Catalogue

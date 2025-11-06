@@ -27,9 +27,27 @@ llama-index-core
 llama-index
 langchain_community
 langchain
-chromadb
 faiss-cpu
 vllm
+
+#Maps
+osmnx
+rasterstats
+rasterio
+shapely
+overpy
+geopandas
+
+#Climate Data
+cdsapi
+xarray
+netCDF4
+h5netcdf
+
+#Graph RAG
+neo4j
+chromadb
+
 
 
 
