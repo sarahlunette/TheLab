@@ -2,7 +2,7 @@
 FastAPI MVP: Chat + Plan generation (24h/72h) + RAG integration (Chroma + LlamaIndex)
 Auth: HTTP Basic
 Logs: Python logging
-LLM: Local Mistral (safetensors, v0.2)
+LLM: vLLM-hosted Mistral (safetensors, v0.2)
 Docs store: ./docs (txt/md)
 RAG vectorstore: ./vectorstore/chroma
 Conversation Memory: LangChain ConversationBufferMemory
@@ -16,6 +16,7 @@ import csv
 import uuid
 import datetime
 import logging
+import requests
 from pathlib import Path
 from collections import defaultdict
 
@@ -26,9 +27,6 @@ from pydantic import BaseModel
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from dotenv import load_dotenv
-
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core import StorageContext, VectorStoreIndex
@@ -43,7 +41,6 @@ from langchain.schema import HumanMessage, AIMessage
 # Load env vars
 # -----------------
 load_dotenv()
-MISTRAL_MODEL_DIR = os.getenv('MISTRAL_MODEL_DIR', '../models/Mistral-7B-Instruct-v0.2')
 PERSIST_DIR = "vectorstore/chroma"
 COLLECTION_NAME = "island_docs"
 
@@ -55,29 +52,83 @@ EXPORT_DIR.mkdir(exist_ok=True)
 API_USER = os.getenv('MVP_USER', 'admin')
 API_PASS = os.getenv('MVP_PASS', 'password')
 
+# vLLM API endpoint
+VLLM_API_URL = os.getenv("VLLM_API_URL", "http://localhost:8001/v1/completions")
+MODEL_NAME = os.getenv("VLLM_MODEL_NAME", "/mnt/c/Users/sarah/Desktop/TheLab_/models/TinyLlama-1.1B-Chat-v1.0")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('mvp')
 
-app = FastAPI(title='MVP Crisis Chat & Plan (RAG-enabled)')
+app = FastAPI(title='MVP Crisis Chat & Plan (RAG + vLLM)')
 security = HTTPBasic()
 ACTION_LOGS = []
 
 # -----------------
-# Load local Mistral model
+# Initialize RAG
 # -----------------
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-logger.info(f"🧠 Loading Mistral model from {MISTRAL_MODEL_DIR} on {device}...")
+logger.info("⚙️ Initializing RAG components...")
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
-tokenizer = AutoTokenizer.from_pretrained(MISTRAL_MODEL_DIR, local_files_only=True, use_fast=False)
-model = AutoModelForCausalLM.from_pretrained(
-    MISTRAL_MODEL_DIR,
-    local_files_only=True,
-    torch_dtype=torch.float16 if device == 'cuda' else torch.float32,
-    device_map='auto' if device == 'cuda' else None,
-    trust_remote_code=True,
-    low_cpu_mem_usage=True
+sbert_model_path = "../models/all-MiniLM-L6-v2"
+embed_model = HuggingFaceEmbedding(
+    model_name=sbert_model_path,
+    model_kwargs={"device": "cuda" if os.system("nvidia-smi > /dev/null 2>&1") == 0 else "cpu"}
 )
-logger.info("✅ Mistral model loaded successfully.")
+
+chroma_client = PersistentClient(path=PERSIST_DIR)
+collection = chroma_client.get_or_create_collection(COLLECTION_NAME)
+vector_store = ChromaVectorStore(chroma_collection=collection)
+storage_context = StorageContext.from_defaults(vector_store=vector_store)
+
+index = VectorStoreIndex.from_vector_store(
+    vector_store, storage_context=storage_context, embed_model=embed_model
+)
+query_engine = index.as_retriever(similarity_top_k=3)
+
+MAX_CONTEXT_TOKENS = 1000
+
+def query_knowledge_base(question: str) -> str:
+    """Retrieve context from vectorstore."""
+    retrieved_nodes = query_engine.retrieve(question)
+    context = "\n".join([n.text for n in retrieved_nodes])
+    logger.info(f"📚 Retrieved {len(retrieved_nodes)} context chunks from RAG.")
+    return context or "No relevant information found."
+
+# -----------------
+# Conversation memory
+# -----------------
+USER_MEMORIES = defaultdict(lambda: ConversationBufferMemory(return_messages=True))
+
+# -----------------
+# Helper: vLLM generator
+# -----------------
+def generate_with_vllm(prompt, max_tokens=1500, temperature=0.7):
+    """Send prompt to vLLM /v1/completions endpoint safely."""
+    # Truncate or simplify prompt if too long
+    if len(prompt) > 100:
+        prompt = prompt[:100] + "\n[... truncated for model input ...]"
+
+    full_prompt = (
+            "Tu es un assistant IA de gestion de crise et de résilience territoriale. "
+            "Réponds de manière concise, structurée et sans répéter la question.\n\n"
+            f"{prompt.strip()}\n\n"
+            "Réponse :"
+    )
+
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": full_prompt,
+        "max_tokens": max_tokens,
+        "temperature": temperature
+    }
+
+    print(payload)
+    r = requests.post("http://localhost:8001/v1/completions", json=payload)
+    r.raise_for_status()
+    return r.json()["choices"][0]["text"]
+
+
+
 
 # -----------------
 # Pydantic model
@@ -94,64 +145,20 @@ def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     return credentials.username
 
 # -----------------
-# Initialize RAG
-# -----------------
-logger.info("⚙️ Initializing RAG components...")
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
-
-# Wrap SBERT in HuggingFaceEmbedding (compatible with LlamaIndex)
-sbert_model_path = "../models/all-MiniLM-L6-v2"
-embed_model = HuggingFaceEmbedding(
-    model_name=sbert_model_path,
-    model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"}
-)
-
-# Persistent Chroma vectorstore
-chroma_client = PersistentClient(path=PERSIST_DIR)
-collection = chroma_client.get_or_create_collection(COLLECTION_NAME)
-vector_store = ChromaVectorStore(chroma_collection=collection)
-storage_context = StorageContext.from_defaults(vector_store=vector_store)
-
-# Initialize index
-index = VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context, embed_model=embed_model)
-query_engine = index.as_retriever(similarity_top_k=3)
-
-MAX_CONTEXT_TOKENS = 1000
-
-def query_knowledge_base(question: str) -> str:
-    retrieved_nodes = query_engine.retrieve(question)
-    context = "\n".join([n.text for n in retrieved_nodes])
-    inputs = tokenizer(context, return_tensors="pt")
-    if inputs.input_ids.size(1) > MAX_CONTEXT_TOKENS:
-        context_tokens = inputs.input_ids[:, -MAX_CONTEXT_TOKENS:]
-        context = tokenizer.decode(context_tokens[0], skip_special_tokens=True)
-    logger.info(f"📚 Retrieved {len(retrieved_nodes)} context chunks from RAG.")
-    return context or "No relevant information found."
-
-# -----------------
-# Conversation memory
-# -----------------
-USER_MEMORIES = defaultdict(lambda: ConversationBufferMemory(return_messages=True))
-
-# -----------------
-# Chat endpoint with conversation memory
+# Chat endpoint
 # -----------------
 @app.post("/chat")
 def chat(request: ChatRequest, username: str = Depends(verify_credentials)):
     input_text = request.question.strip()
-
-    # Retrieve user-specific memory
     memory = USER_MEMORIES[username]
-
-    # Retrieve RAG context
     rag_context = query_knowledge_base(input_text)
 
-    # Build conversation history (last 5 messages)
     history_text = "\n".join([
         f"{msg.type.capitalize()}: {msg.content}"
         for msg in memory.chat_memory.messages[-5:]
     ])
 
+    # Full prompt (exactly as your version)
     prompt = f"""
     Tu es un **assistant IA de gestion de crise et de résilience territoriale**, chargé d’aider des décideurs locaux à **prioriser et planifier** des projets de résilience à partir de données structurées (tabulaires) et de retours d’expérience (retex).
 
@@ -236,7 +243,7 @@ def chat(request: ChatRequest, username: str = Depends(verify_credentials)):
         "justification": "Basé sur 3 retex post-Irma indiquant panne réseau >48h.",
         "sources": ["RAG_doc_12", "table_infra_2017"],
         "resources_estimate": {{"budget_eur": 150000, "fte": 3, "equipment": ["pompes", "générateurs"]}},
-        "timeline": {{"30d": ["sécuriser 2 stations"], "90d": ["renforcer conduites"], "180d": ["auditer réseau complet"]}}, # TODO: Complexifier timeline
+        "timeline": {{"30d": ["sécuriser 2 stations"], "90d": ["renforcer conduites"], "180d": ["auditer réseau complet"]}},
         "stakeholders": ["Commune", "ARS", "Protection civile"],
         "risks": [{{"risk": "retard d’approvisionnement", "mitigation": "prévoir stock tampon"}}],
         "kpis": [{{"kpi": "% foyers raccordés", "target": ">95%", "measure": "mensuel"}}],
@@ -274,23 +281,14 @@ def chat(request: ChatRequest, username: str = Depends(verify_credentials)):
     Assistant:
     """
 
-    # Generate response with Mistral
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=2000,
-            temperature=0.7,
-            do_sample=True,
-            pad_token_id=tokenizer.eos_token_id,
-        )
-    answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    # 🔹 Generate via vLLM
+    answer = generate_with_vllm(prompt)
 
-    # Update memory
+    # 🔹 Update memory
     memory.chat_memory.add_user_message(input_text)
     memory.chat_memory.add_ai_message(answer)
 
-    # Log
+    # 🔹 Log
     ACTION_LOGS.append({
         'time': datetime.datetime.now().isoformat(),
         'username': username,
@@ -316,13 +314,10 @@ def reset_chat(username: str = Depends(verify_credentials)):
 @app.get("/chat/history")
 def get_history(username: str = Depends(verify_credentials)):
     memory = USER_MEMORIES[username]
-    return [
-        {"role": msg.type, "content": msg.content}
-        for msg in memory.chat_memory.messages
-    ]
+    return [{"role": msg.type, "content": msg.content} for msg in memory.chat_memory.messages]
 
 # -----------------
-# Plan generation endpoint
+# Plan generation
 # -----------------
 @app.get("/plan")
 def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
@@ -365,7 +360,7 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
     return FileResponse(str(filename), media_type='application/pdf', filename=f"plan_{horizon}h.pdf")
 
 # -----------------
-# Upload new document
+# Upload document
 # -----------------
 @app.post("/upload_doc")
 def upload_doc(file: UploadFile = File(...), username: str = Depends(verify_credentials)):
@@ -375,7 +370,7 @@ def upload_doc(file: UploadFile = File(...), username: str = Depends(verify_cred
     return {"message": f"Document {file.filename} uploaded successfully."}
 
 # -----------------
-# Logs endpoints
+# Logs
 # -----------------
 @app.get("/logs")
 def get_logs(username: str = Depends(verify_credentials)):
@@ -390,3 +385,22 @@ def export_logs_csv(username: str = Depends(verify_credentials)):
         for log in ACTION_LOGS:
             writer.writerow({k: log.get(k, "") for k in ['time', 'username', 'question', 'context_used', 'answer', 'plan_horizon', 'file']})
     return FileResponse(str(filename), media_type='text/csv', filename=filename.name)
+
+# -----------------
+# 🧩 MCP tool trigger endpoint
+# -----------------
+import requests
+
+MCP_URL = "http://localhost:8100"
+
+@app.post("/tool")
+def call_mcp_tool(tool_name: str, params: dict, username: str = Depends(verify_credentials)):
+    """
+    Call a specific tool hosted on the MCP server (e.g. osm_data_collector or climate_forecast_collector).
+    """
+    try:
+        response = requests.post(f"{MCP_URL}/tools/{tool_name}", json=params)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Tool call failed: {e}")

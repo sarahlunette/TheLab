@@ -29,6 +29,7 @@ langchain_community
 langchain
 faiss-cpu
 vllm
+anthropic
 
 #Maps
 osmnx
@@ -47,6 +48,14 @@ h5netcdf
 #Graph RAG
 neo4j
 chromadb
+
+#Agents
+fastmcp
+
+#Display
+streamlit
+weasyprint
+markdown
 
 
 

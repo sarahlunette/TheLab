@@ -11,3 +11,4 @@
 [] tune the llm to know we are talking about one specific situation ? (we have assisted a cyclone)
 [] add alerts and replicas information (waves, cyclones)
 [] Two missing datasets on Joint Research Center Data Catalogue
+[] Docker compose

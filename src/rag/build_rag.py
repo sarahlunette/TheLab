@@ -20,7 +20,7 @@ load_dotenv()
 
 PERSIST_DIR = "vectorstore/chroma"
 COLLECTION_NAME = "island_docs"
-DOCS_DIR = "data/documents"
+DOCS_DIR = "app/docs"
 CSV_DIR = "data/"
 
 # -------------------------------
@@ -73,11 +73,12 @@ def add_new_data():
 
     # Load CSV files
     if os.path.exists(CSV_DIR):
-        for file in os.listdir(CSV_DIR):
-            if file.endswith(".csv"):
-                csv_path = os.path.join(CSV_DIR, file)
-                csv_docs = csv_to_documents(csv_path)
-                new_nodes += parser.get_nodes_from_documents(csv_docs)
+        for folder in os.listdir(CSV_DIR):
+            for file in os.listdir(CSV_DIR + folder):
+                if file.endswith(".csv"):
+                    csv_path = os.path.join(CSV_DIR + folder, file)
+                    csv_docs = csv_to_documents(csv_path)
+                    new_nodes += parser.get_nodes_from_documents(csv_docs)
 
     if new_nodes:
         print(f"🧩 Adding {len(new_nodes)} new nodes to Chroma...")

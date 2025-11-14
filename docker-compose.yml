@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  mcp:
+    build: ./mcp_server
+    ports:
+      - "8100:8100"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      FASTMCP_HOST: "0.0.0.0"
+      FASTMCP_PORT: "8100"
+
