@@ -3,3 +3,4 @@ vectorstore
 storage
 models
 venv
+.env
