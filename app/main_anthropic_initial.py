@@ -33,8 +33,6 @@ from langchain.memory import ConversationBufferMemory
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from huggingface_hub import login
-
 # ============================================================
 # Load environment variables
 # ============================================================
@@ -59,8 +57,6 @@ CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5")
 
 anthropic_client = Anthropic(api_key=CLAUDE_API_KEY)
 
-login(token=os.getenv("HF_TOKEN"))
-
 # Directories
 DOCS_DIR = Path("./docs")
 DOCS_DIR.mkdir(exist_ok=True)
@@ -68,7 +64,7 @@ DOCS_DIR.mkdir(exist_ok=True)
 EXPORT_DIR = Path("./exports")
 EXPORT_DIR.mkdir(exist_ok=True)
 
-PERSIST_DIR = "vectorstore_temporary/chroma"
+PERSIST_DIR = "vectorstore/chroma"
 COLLECTION_NAME = "island_docs"
 
 logging.basicConfig(level=logging.INFO)
@@ -180,55 +176,17 @@ class ChatRequest(BaseModel):
 # ============================================================
 # Chat endpoint
 # ============================================================
-MAX_PROMPT_CHARS = 500_000
-
-def trim_text(text: str, max_chars: int = MAX_PROMPT_CHARS) -> str:
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars] + "\n\n[...TRUNCATED FOR LENGTH...]"
-
-def compress_history(memory, claude_summarizer):
-    """Summarize history when too long using Claude."""
-    history_text = "\n".join(
-        f"{m.type.capitalize()}: {m.content}"
-        for m in memory.chat_memory.messages
-    )
-
-    if len(history_text) < 50000:  # 50k chars safe
-        return history_text
-
-    summary_prompt = f"""
-Summarize the following conversation history into 800 words maximum.
-Keep ONLY the essential facts, tasks, constraints, decisions.
-
-History:
-{history_text}
-"""
-    return claude_summarizer(summary_prompt)
-
-def compress_rag_context(rag_text: str, max_chars_per_doc=15000):
-    docs = rag_text.split("\n\n")
-    trimmed_docs = [trim_text(d, max_chars_per_doc) for d in docs]
-    return "\n\n".join(trimmed_docs)
-
-
 @app.post("/chat")
 def chat(req: ChatRequest, username: str = Depends(verify_credentials)):
     memory = USER_MEMORIES[username]
 
     user_msg = req.question.strip()
-
-    # --- 1. RAG retrieval ---
     rag_context = query_knowledge_base(user_msg)
-    rag_context = compress_rag_context(rag_context)
 
-    # --- 2. History compression ---
-    history_raw = "\n".join(
+    history = "\n".join(
         f"{m.type.capitalize()}: {m.content}"
         for m in memory.chat_memory.messages[-5:]
     )
-
-    history = trim_text(history_raw, max_chars=40_000)
 
     prompt = f"""
 You are **RESILIENCE-GPT**, a Crisis & Resilience Strategic Planner AI specializing in:
@@ -517,16 +475,10 @@ If the intent is unclear:
 * and **never** trigger the full structured report unless the user clearly wants a resilience or planning answer.
 
 """
- # --- 4. Global prompt trim (SUPER IMPORTANT) ---
-    prompt = trim_text(prompt, max_chars=MAX_PROMPT_CHARS)
 
-    # --- 5. Call Claude safely ---
-    try:
-        answer = generate_with_claude(prompt)
-    except Exception as e:
-        return {"error": str(e)}
+    answer = generate_with_claude(prompt)
 
-    # Save memory
+    # Update conversation memory
     memory.chat_memory.add_user_message(user_msg)
     memory.chat_memory.add_ai_message(answer)
 
@@ -540,9 +492,11 @@ If the intent is unclear:
 
     return {
         "answer": answer,
-        "context_used": rag_context[:2000],
+        "context_used": rag_context,
         "conversation_turns": len(memory.chat_memory.messages) // 2
     }
+
+
 # ============================================================
 # Reset chat history
 # ============================================================

@@ -30,6 +30,8 @@ langchain
 faiss-cpu
 vllm
 anthropic
+qdrant-client
+llama-index-vector-stores-qdrant
 
 #Maps
 osmnx
@@ -56,6 +58,7 @@ fastmcp
 streamlit
 weasyprint
 markdown
+pdfplumber
 
 
 
