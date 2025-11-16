@@ -1,23 +1,72 @@
 version: "3.9"
-services:
-  mcp:
-    build: ./mcp_server
-    ports:
-      - "8100:8100"
-    volumes:
-      - ./data:/app/data
-      - ./config:/app/config
-    environment:
-      FASTMCP_HOST: "0.0.0.0"
-      FASTMCP_PORT: "8100"
 
+services:
   qdrant:
-    image: qdrant/qdrant
+    image: qdrant/qdrant:latest
     container_name: qdrant
     ports:
       - "6333:6333"
     volumes:
-      - qdrant_data:/qdrant/storage
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+  mcp_server:
+    build:
+      context: ./mcp_server
+      dockerfile: Dockerfile
+    container_name: mcp_server
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - CDSAPI_URL=${CDSAPI_URL}
+      - CDSAPI_KEY=${CDSAPI_KEY}
+    volumes:
+      - ./mcp_server:/app
+      - ./data:/data
+    ports:
+      - "9001:9001"
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+  vectorstore_builder:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: vectorstore_builder
+    command: ["python", "build_vectorstore.py"]
+    volumes:
+      - ./app:/app
+      - ./docs:/docs
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+    depends_on:
+      - qdrant
+    restart: "no"
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: resilience_api
+    ports:
+      - "8000:8000"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+    volumes:
+      - ./app:/app
+      - ./docs:/docs
+      - ./exports:/exports
+      - qdrant_storage:/qdrant/storage
+    depends_on:
+      - qdrant
+      - vectorstore_builder
+    restart: unless-stopped
 
 volumes:
-  qdrant_data:
+  qdrant_storage:

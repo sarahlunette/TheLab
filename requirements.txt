@@ -63,6 +63,16 @@ pdfplumber
 
 
 
+fastmcp==0.3.1
+fastapi
+uvicorn
+requests
 
+overpy
+cdsapi
+pandas
+xarray
+
+pyyaml
 
 

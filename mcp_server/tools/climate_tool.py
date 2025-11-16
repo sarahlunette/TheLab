@@ -5,40 +5,90 @@ import xarray as xr
 import pandas as pd
 import anyio
 from pathlib import Path
+from fastmcp import mcp_tool
 
 
-def get_climate_forecast_tool(
-    date_str: str,
-    area: list[float] = [18.2, -63.2, 18.0, -62.9]
-) -> str:
+# ============================================================
+# Helper: Validate date format
+# ============================================================
+def validate_date(date_str: str):
+    if len(date_str) != 7 or date_str[4] != "-":
+        return False
+    year, month = date_str.split("-")
+    return year.isdigit() and month.isdigit() and 1 <= int(month) <= 12
+
+
+# ============================================================
+# Main Sync Function
+# ============================================================
+def get_climate_forecast(date_str: str, area: list[float]):
     """
-    Fetch seasonal climate forecast from Copernicus CDS API and convert to CSV.
+    Fetch ECMWF seasonal climate forecast via Copernicus CDS API.
 
     Args:
-        date_str (str): Date in 'YYYY-MM' format.
-        area (list[float]): Bounding box [N, W, S, E].
+        date_str (str): 'YYYY-MM'
+        area (list[float]): [N, W, S, E]
 
     Returns:
-        str: Path to the generated CSV file or error message.
+        dict: {status, csv_path, count, message}
     """
-    output_dir = "./data/climate_data"
-    os.makedirs(output_dir, exist_ok=True)
+
+    # ---------------------------------------------
+    # Input validation
+    # ---------------------------------------------
+    if not validate_date(date_str):
+        return {
+            "status": "error",
+            "message": "Invalid date format. Use 'YYYY-MM'."
+        }
+
+    if not isinstance(area, list) or len(area) != 4:
+        return {
+            "status": "error",
+            "message": "Area must be a list of 4 floats: [N, W, S, E]."
+        }
+
+    year, month = date_str.split("-")
+
+    print(f"\n📅 Requesting climate forecast for {year}-{month}")
+    print(f"🗺  Area: {area}")
+
+    # ---------------------------------------------
+    # Config & environment
+    # ---------------------------------------------
+    output_dir = Path("./data/climate_data")
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     config_file = Path("config/.cdsapirc")
     if not config_file.exists():
-        return "❌ Missing Copernicus config file at config/.cdsapirc"
+        return {
+            "status": "error",
+            "message": "Missing config/.cdsapirc (CDS API credentials)."
+        }
 
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
 
-    os.environ["CDSAPI_URL"] = config["url"]
-    os.environ["CDSAPI_KEY"] = config["key"]
+    os.environ["CDSAPI_URL"] = config.get("url", "")
+    os.environ["CDSAPI_KEY"] = config.get("key", "")
 
-    client = cdsapi.Client()
+    if not os.environ["CDSAPI_KEY"]:
+        return {"status": "error", "message": "Invalid CDS API key."}
 
-    filename = f"{output_dir}/forecast_{date_str}.nc"
+    # ---------------------------------------------
+    # Output filenames
+    # ---------------------------------------------
+    nc_path = output_dir / f"forecast_{date_str}.nc"
+    csv_path = output_dir / f"forecast_{date_str}.csv"
+
     leadtimes = [str(i) for i in range(0, 168 + 1, 6)]
 
+    # ---------------------------------------------
+    # Fetch NetCDF file
+    # ---------------------------------------------
+    client = cdsapi.Client()
+
+    print("📡 Fetching data from Copernicus…")
     try:
         client.retrieve(
             "seasonal-original-single-levels",
@@ -46,32 +96,56 @@ def get_climate_forecast_tool(
                 "originating_centre": "ecmwf",
                 "system": "51",
                 "variable": ["2m_temperature", "total_precipitation"],
-                "year": date_str[:4],
-                "month": date_str[5:7],
+                "year": year,
+                "month": month,
                 "day": "01",
                 "leadtime_hour": leadtimes,
                 "area": area,
                 "format": "netcdf",
             },
-            filename,
+            str(nc_path),
         )
     except Exception as e:
-        return f"❌ Error fetching forecast: {e}"
+        return {"status": "error", "message": f"CDS API Error: {e}"}
 
-    ds = xr.open_dataset(filename)
-    df = ds.to_dataframe().reset_index()
+    if not nc_path.exists():
+        return {"status": "error", "message": "Failed to download NetCDF file."}
 
-    if "t2m" in df.columns:
-        df["t2m"] -= 273.15  # Convert Kelvin → Celsius
+    # ---------------------------------------------
+    # Convert NetCDF → CSV
+    # ---------------------------------------------
+    print("📊 Converting NetCDF → CSV…")
 
-    csv_file = filename.replace(".nc", ".csv")
-    df.to_csv(csv_file, index=False)
-    return f"✅ Climate forecast CSV saved at {csv_file}"
+    try:
+        ds = xr.open_dataset(nc_path)
+        df = ds.to_dataframe().reset_index()
+
+        # Temperature conversion
+        if "t2m" in df.columns:
+            df["t2m"] = df["t2m"] - 273.15  # Kelvin → Celsius
+
+        df.to_csv(csv_path, index=False)
+
+    except Exception as e:
+        return {"status": "error", "message": f"Error processing NetCDF: {e}"}
+
+    print(f"✅ Saved: {csv_path} ({len(df)} records)")
+
+    return {
+        "status": "success",
+        "csv_path": str(csv_path),
+        "records": len(df),
+        "message": "Climate forecast successfully retrieved."
+    }
 
 
-# ✅ Async-safe wrapper
-async def run_climate_forecast_tool(date_str: str, area: list[float] = [18.2, -63.2, 18.0, -62.9]) -> str:
+# ============================================================
+# ASYNC WRAPPER FOR FASTMCP
+# ============================================================
+@mcp_tool()
+async def run_climate_forecast_tool(date_str: str, area: list[float] = [18.2, -63.2, 18.0, -62.9]):
     """
-    Run the blocking Copernicus CDS API call in a background thread to prevent blocking.
+    Async wrapper for the blocking climate forecast tool.
+    Runs inside a background thread for FastMCP compatibility.
     """
-    return await anyio.to_thread.run_sync(get_climate_forecast_tool, date_str, area)
+    return await anyio.to_thread.run_sync(get_climate_forecast, date_str, area)
