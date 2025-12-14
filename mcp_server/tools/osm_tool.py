@@ -83,7 +83,10 @@ def get_osm_data(location: str, features: list[str]):
         return {"status": "error", "message": f"Area lookup failed: {e}"}
 
     if not areas.areas:
-        return {"status": "error", "message": f"No administrative area found for '{location}'"}
+        return {
+            "status": "error",
+            "message": f"No administrative area found for '{location}'",
+        }
 
     print(f"🗺 Found {len(areas.areas)} candidate area(s). Using first.")
 
@@ -116,39 +119,45 @@ def get_osm_data(location: str, features: list[str]):
         # ------------------------------
         for n in result.nodes:
             lat, lon = safe_center(n)
-            results.append({
-                "type": "node",
-                "feature": feature,
-                "name": n.tags.get("name", ""),
-                "lat": lat,
-                "lon": lon
-            })
+            results.append(
+                {
+                    "type": "node",
+                    "feature": feature,
+                    "name": n.tags.get("name", ""),
+                    "lat": lat,
+                    "lon": lon,
+                }
+            )
 
         # ------------------------------
         # Ways
         # ------------------------------
         for w in result.ways:
             lat, lon = safe_center(w)
-            results.append({
-                "type": "way",
-                "feature": feature,
-                "name": w.tags.get("name", ""),
-                "lat": lat,
-                "lon": lon
-            })
+            results.append(
+                {
+                    "type": "way",
+                    "feature": feature,
+                    "name": w.tags.get("name", ""),
+                    "lat": lat,
+                    "lon": lon,
+                }
+            )
 
         # ------------------------------
         # Relations
         # ------------------------------
         for r in result.relations:
             lat, lon = safe_center(r)
-            results.append({
-                "type": "relation",
-                "feature": feature,
-                "name": r.tags.get("name", ""),
-                "lat": lat,
-                "lon": lon
-            })
+            results.append(
+                {
+                    "type": "relation",
+                    "feature": feature,
+                    "name": r.tags.get("name", ""),
+                    "lat": lat,
+                    "lon": lon,
+                }
+            )
 
         # Delay to respect Overpass rate limits
         time.sleep(1.2)
@@ -166,11 +175,7 @@ def get_osm_data(location: str, features: list[str]):
     print(f"\n✅ Saved CSV: {output_path}")
     print(f"📊 Rows: {len(df)}")
 
-    return {
-        "status": "success",
-        "count": len(df),
-        "csv_path": str(output_path)
-    }
+    return {"status": "success", "count": len(df), "csv_path": str(output_path)}
 
 
 # ============================================================

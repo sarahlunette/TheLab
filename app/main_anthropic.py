@@ -92,9 +92,7 @@ vector_store = ChromaVectorStore(chroma_collection=collection)
 storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
 index = VectorStoreIndex.from_vector_store(
-    vector_store=vector_store,
-    storage_context=storage_context,
-    embed_model=embed_model
+    vector_store=vector_store, storage_context=storage_context, embed_model=embed_model
 )
 
 query_engine = index.as_retriever(similarity_top_k=3)
@@ -124,11 +122,12 @@ def generate_with_claude(prompt: str, max_tokens=64000, temperature=0.7):
         temperature=temperature,
         messages=[{"role": "user", "content": prompt}],
     ) as stream:
-        
+
         # Get the entire final output as a single string
         full_text = stream.get_final_text()
 
     return full_text
+
 
 # ============================================================
 # Google OAuth token validation
@@ -154,7 +153,7 @@ def verify_google_oauth(token: str) -> str:
 # ============================================================
 def verify_credentials(
     credentials: HTTPBasicCredentials = Depends(security),
-    authorization: str = Header(None)
+    authorization: str = Header(None),
 ):
     if AUTH_MODE == "google":
         if not authorization or not authorization.startswith("Bearer "):
@@ -182,16 +181,17 @@ class ChatRequest(BaseModel):
 # ============================================================
 MAX_PROMPT_CHARS = 500_000
 
+
 def trim_text(text: str, max_chars: int = MAX_PROMPT_CHARS) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + "\n\n[...TRUNCATED FOR LENGTH...]"
 
+
 def compress_history(memory, claude_summarizer):
     """Summarize history when too long using Claude."""
     history_text = "\n".join(
-        f"{m.type.capitalize()}: {m.content}"
-        for m in memory.chat_memory.messages
+        f"{m.type.capitalize()}: {m.content}" for m in memory.chat_memory.messages
     )
 
     if len(history_text) < 50000:  # 50k chars safe
@@ -205,6 +205,7 @@ History:
 {history_text}
 """
     return claude_summarizer(summary_prompt)
+
 
 def compress_rag_context(rag_text: str, max_chars_per_doc=15000):
     docs = rag_text.split("\n\n")
@@ -224,8 +225,7 @@ def chat(req: ChatRequest, username: str = Depends(verify_credentials)):
 
     # --- 2. History compression ---
     history_raw = "\n".join(
-        f"{m.type.capitalize()}: {m.content}"
-        for m in memory.chat_memory.messages[-5:]
+        f"{m.type.capitalize()}: {m.content}" for m in memory.chat_memory.messages[-5:]
     )
 
     history = trim_text(history_raw, max_chars=40_000)
@@ -517,7 +517,7 @@ If the intent is unclear:
 * and **never** trigger the full structured report unless the user clearly wants a resilience or planning answer.
 
 """
- # --- 4. Global prompt trim (SUPER IMPORTANT) ---
+    # --- 4. Global prompt trim (SUPER IMPORTANT) ---
     prompt = trim_text(prompt, max_chars=MAX_PROMPT_CHARS)
 
     # --- 5. Call Claude safely ---
@@ -530,19 +530,23 @@ If the intent is unclear:
     memory.chat_memory.add_user_message(user_msg)
     memory.chat_memory.add_ai_message(answer)
 
-    ACTION_LOGS.append({
-        "time": datetime.datetime.now().isoformat(),
-        "user": username,
-        "question": user_msg,
-        "answer": answer,
-        "context": rag_context[:500],
-    })
+    ACTION_LOGS.append(
+        {
+            "time": datetime.datetime.now().isoformat(),
+            "user": username,
+            "question": user_msg,
+            "answer": answer,
+            "context": rag_context[:500],
+        }
+    )
 
     return {
         "answer": answer,
         "context_used": rag_context[:2000],
-        "conversation_turns": len(memory.chat_memory.messages) // 2
+        "conversation_turns": len(memory.chat_memory.messages) // 2,
     }
+
+
 # ============================================================
 # Reset chat history
 # ============================================================
@@ -564,8 +568,7 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
         "Plan 24h:\n"
         "- Shelter\n- Water\n- Missing persons\n- Medical care\n- Transport\n- Electricity\n- Psych support"
         if horizon == 24
-        else
-        "Plan 72h:\n"
+        else "Plan 72h:\n"
         "- Restore systems\n- NGOs coordination\n- Debris removal\n- Psych support\n- Critical infra\n- Procurement"
     )
 
@@ -584,7 +587,9 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
 # Upload documents
 # ============================================================
 @app.post("/upload_doc")
-def upload_doc(file: UploadFile = File(...), username: str = Depends(verify_credentials)):
+def upload_doc(
+    file: UploadFile = File(...), username: str = Depends(verify_credentials)
+):
     filepath = DOCS_DIR / file.filename
     with open(filepath, "wb") as f:
         f.write(file.file.read())

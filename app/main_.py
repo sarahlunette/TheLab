@@ -84,9 +84,7 @@ logger = logging.getLogger("mvp")
 # ------------------------------------------------------------
 # Initialize RAG
 # ------------------------------------------------------------
-embed_model = HuggingFaceEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 qdrant_client = QdrantClient(url=QDRANT_URL)
 
@@ -180,8 +178,6 @@ Your output MUST be a valid JSON object with the following structure:
 User message:
 "{user_question}"
 """
-
-
 
 
 def _default_structured_reasoning():
@@ -559,7 +555,7 @@ Focus strongly on **prioritization** and **project-level clarity**.
 4. **In short mode**, answer in a focused way, without the full structure.
 
 Now, based on all of the above, answer the CURRENT USER MESSAGE.
-""" 
+"""
 
     MAX_PROMPT_CHARS = 600_000
     prompt = prompt[:MAX_PROMPT_CHARS]
@@ -576,14 +572,11 @@ Now, based on all of the above, answer the CURRENT USER MESSAGE.
         "answer": answer,
         "context_used": rag_context,
         "reasoning": reasoning_output,
-
         "extracted_date": entities.get("date"),
         "extracted_lon": entities.get("lon"),
         "extracted_lat": entities.get("lat"),
         "extracted_radius": entities.get("radius"),
-
         "geospatial_data_used": geospatial_result,
-
         "conversation_turns": len(memory.chat_memory.messages) // 2,
     }
 

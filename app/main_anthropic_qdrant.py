@@ -35,6 +35,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from huggingface_hub import login
+
 login(token=os.getenv("HF_TOKEN"))
 
 # ============================================================
@@ -82,9 +83,7 @@ ACTION_LOGS = []
 # ============================================================
 logger.info("Initializing RAG with Qdrant vectorstore...")
 
-embed_model = HuggingFaceEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 qdrant_client = QdrantClient(url=QDRANT_URL)
 
@@ -144,13 +143,12 @@ def verify_google_oauth(token: str) -> str:
     return info["email"]
 
 
-
 # ============================================================
 # Authentication helper
 # ============================================================
 def verify_credentials(
     credentials: HTTPBasicCredentials = Depends(security),
-    authorization: str = Header(None)
+    authorization: str = Header(None),
 ):
     if AUTH_MODE == "google":
         if not authorization or not authorization.startswith("Bearer "):
@@ -183,8 +181,7 @@ def chat(req: ChatRequest, username: str = Depends(verify_credentials)):
     rag_context = query_knowledge_base(user_msg)
 
     history = "\n".join(
-        f"{m.type.capitalize()}: {m.content}"
-        for m in memory.chat_memory.messages[-5:]
+        f"{m.type.capitalize()}: {m.content}" for m in memory.chat_memory.messages[-5:]
     )
 
     # --------------------------
@@ -477,10 +474,9 @@ If the intent is unclear:
 * and **never** trigger the full structured report unless the user clearly wants a resilience or planning answer.
 
 """
-    MAX_PROMPT_CHARS = 600_000   # approx 180k–200k tokens safely
+    MAX_PROMPT_CHARS = 600_000  # approx 180k–200k tokens safely
 
     safe_prompt = prompt[:MAX_PROMPT_CHARS]
-
 
     answer = generate_with_claude(safe_prompt)
 
@@ -488,18 +484,20 @@ If the intent is unclear:
     memory.chat_memory.add_user_message(user_msg)
     memory.chat_memory.add_ai_message(answer)
 
-    ACTION_LOGS.append({
-        "time": datetime.datetime.now().isoformat(),
-        "user": username,
-        "question": user_msg,
-        "answer": answer,
-        "context": rag_context[:500],
-    })
+    ACTION_LOGS.append(
+        {
+            "time": datetime.datetime.now().isoformat(),
+            "user": username,
+            "question": user_msg,
+            "answer": answer,
+            "context": rag_context[:500],
+        }
+    )
 
     return {
         "answer": answer,
         "context_used": rag_context,
-        "conversation_turns": len(memory.chat_memory.messages) // 2
+        "conversation_turns": len(memory.chat_memory.messages) // 2,
     }
 
 
@@ -522,8 +520,8 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
 
     text = (
         "Plan 24h:\n- Shelter\n- Water\n- Missing persons\n- Medical care\n- Transport\n- Electricity\n- Psych support"
-        if horizon == 24 else
-        "Plan 72h:\n- Restore systems\n- NGOs coordination\n- Debris removal\n- Psych support\n- Critical infra\n- Procurement"
+        if horizon == 24
+        else "Plan 72h:\n- Restore systems\n- NGOs coordination\n- Debris removal\n- Psych support\n- Critical infra\n- Procurement"
     )
 
     filename = EXPORT_DIR / f"plan_{horizon}h_{uuid.uuid4().hex[:6]}.pdf"
@@ -540,14 +538,14 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
 # Upload docs (no reindexing here)
 # ============================================================
 @app.post("/upload_doc")
-def upload_doc(file: UploadFile = File(...), username: str = Depends(verify_credentials)):
+def upload_doc(
+    file: UploadFile = File(...), username: str = Depends(verify_credentials)
+):
     filepath = DOCS_DIR / file.filename
     with open(filepath, "wb") as f:
         f.write(file.file.read())
 
-    return {
-        "message": "File uploaded. Run build_vectorstore.py again to reindex."
-    }
+    return {"message": "File uploaded. Run build_vectorstore.py again to reindex."}
 
 
 # ============================================================
@@ -564,8 +562,7 @@ def export_logs(username: str = Depends(verify_credentials)):
 
     with open(filename, "w", newline="", encoding="utf8") as f:
         writer = csv.DictWriter(
-            f,
-            fieldnames=["time", "user", "question", "answer", "context"]
+            f, fieldnames=["time", "user", "question", "answer", "context"]
         )
         writer.writeheader()
 

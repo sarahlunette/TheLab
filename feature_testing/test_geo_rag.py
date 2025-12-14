@@ -20,12 +20,14 @@ load_dotenv()
 # -------------------------
 # 2️⃣ Charger les données
 # -------------------------
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # a) Tabulaire
 tabular = pd.read_csv("../data/disaster_locations/disaster_location_1960-2018.csv")
 
 # b) Geo
-countries_boundaries = gpd.read_file("../data/countries_boundaries/ne_110m_admin_0_boundary_lines_land.shp")
+countries_boundaries = gpd.read_file(
+    "../data/countries_boundaries/ne_110m_admin_0_boundary_lines_land.shp"
+)
 population_zones = gpd.read_file("../data/population_shp/JRC_POPULATION_2018.shp")
 
 # c) Raster
@@ -36,7 +38,9 @@ raster = rasterio.open("../data/population/population_AF01_2018-10-01.tif")
 # -------------------------
 
 # Jointure spatiale : population × zones inondables
-merged = gpd.sjoin(population_zones, countries_boundaries, how="inner", predicate="intersects")
+merged = gpd.sjoin(
+    population_zones, countries_boundaries, how="inner", predicate="intersects"
+)
 print(merged)
 # merged["population_exposed"] = merged["population"]  # exemple simple
 
@@ -86,8 +90,7 @@ Peux-tu générer un rapport synthétique avec recommandations pour prioriser le
 """
 
 response = client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": prompt}]
+    model="gpt-4", messages=[{"role": "user", "content": prompt}]
 )
 
 print("=== Rapport Synthétique ===")

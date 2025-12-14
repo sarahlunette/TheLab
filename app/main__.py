@@ -85,9 +85,7 @@ ACTION_LOGS: list[Dict[str, Any]] = []
 # ============================================================
 logger.info("Initializing RAG with Qdrant vectorstore...")
 
-embed_model = HuggingFaceEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 qdrant_client = QdrantClient(url=QDRANT_URL)
 
@@ -106,6 +104,7 @@ index = VectorStoreIndex.from_vector_store(
 query_engine = index.as_retriever(similarity_top_k=3)
 
 USER_MEMORIES = defaultdict(lambda: ConversationBufferMemory(return_messages=True))
+
 
 # ============================================================
 # RAG helper
@@ -332,8 +331,7 @@ async def chat(req: ChatRequest, username: str = Depends(verify_credentials)):
 
     # 3. History (last 5 messages)
     history = "\n".join(
-        f"{m.type.upper()}: {m.content}"
-        for m in memory.chat_memory.messages[-5:]
+        f"{m.type.upper()}: {m.content}" for m in memory.chat_memory.messages[-5:]
     )
 
     # 4. Reasoning metadata

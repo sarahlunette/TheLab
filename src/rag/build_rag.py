@@ -30,6 +30,8 @@ CSV_DIR = "data/"
 embed_model = HuggingFaceEmbedding(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
 )
+
+
 # -------------------------------
 # 3️⃣ Helper: Convert CSV to Documents
 # -------------------------------
@@ -87,6 +89,7 @@ def add_new_data():
         print("✅ Vector store updated successfully.")
     else:
         print("⚠️ No new data found to add.")
+
 
 # -------------------------------
 # 6️⃣ Main execution

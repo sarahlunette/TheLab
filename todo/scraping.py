@@ -4,19 +4,22 @@ from urllib.parse import urljoin
 import json
 import os
 import sys
-sys.path.append('../../data/')
-sys.path.append('../../data/scraping/')
+
+sys.path.append("../../data/")
+sys.path.append("../../data/scraping/")
 from src.data.todo.scraping import pages_to_scrape
+
 
 def fetch_html(url):
     resp = requests.get(url)
     resp.raise_for_status()
     return resp.text
 
+
 def parse_normal_page(url, html):
     soup = BeautifulSoup(html, "html.parser")
     title = soup.find("h1")
-    title_text = title.get_text(strip=True) if title else ''
+    title_text = title.get_text(strip=True) if title else ""
 
     # sections — basé sur h2 (ou h3 selon page)
     sections = []
@@ -38,17 +41,13 @@ def parse_normal_page(url, html):
         text = a.get_text(strip=True)
         links.append({"text": text, "href": full})
 
-    return {
-        "url": url,
-        "title": title_text,
-        "sections": sections,
-        "links": links
-    }
+    return {"url": url, "title": title_text, "sections": sections, "links": links}
+
 
 def parse_glossary_page(url, html):
     soup = BeautifulSoup(html, "html.parser")
     title = soup.find("h1")
-    title_text = title.get_text(strip=True) if title else ''
+    title_text = title.get_text(strip=True) if title else ""
 
     # On suppose que les mots sont des liens <a> dans une liste
     terms = []
@@ -59,16 +58,13 @@ def parse_glossary_page(url, html):
             # On pourrait fetch ce href pour obtenir sa définition, mais ici on met le lien
             terms.append({"term": term, "href": href})
 
-    return {
-        "url": url,
-        "title": title_text,
-        "terms": terms
-    }
+    return {"url": url, "title": title_text, "terms": terms}
+
 
 def parse_term_page(url, html):
     soup = BeautifulSoup(html, "html.parser")
     title = soup.find("h1")
-    title_text = title.get_text(strip=True) if title else ''
+    title_text = title.get_text(strip=True) if title else ""
 
     # définition (généralement dans <p> sous le titre)
     paragraphs = []
@@ -80,14 +76,17 @@ def parse_term_page(url, html):
     # et les liens associés
     related = []
     for a in soup.find_all("a", href=True):
-        related.append({"text": a.get_text(strip=True), "href": urljoin(url, a["href"])})
+        related.append(
+            {"text": a.get_text(strip=True), "href": urljoin(url, a["href"])}
+        )
 
     return {
         "url": url,
         "title": title_text,
         "definition_paragraphs": paragraphs,
-        "related": related
+        "related": related,
     }
+
 
 def build_json():
 
@@ -115,12 +114,14 @@ def build_json():
                 try:
                     h = fetch_html(t["href"])
                     parsed = parse_term_page(t["href"], h)
-                    new_terms.append({
-                        "term": t["term"],
-                        "href": t["href"],
-                        "definition_paragraphs": parsed["definition_paragraphs"],
-                        "related": parsed["related"]
-                    })
+                    new_terms.append(
+                        {
+                            "term": t["term"],
+                            "href": t["href"],
+                            "definition_paragraphs": parsed["definition_paragraphs"],
+                            "related": parsed["related"],
+                        }
+                    )
                 except Exception as e:
                     # si échec, on se contente du lien
                     new_terms.append(t)
@@ -128,9 +129,11 @@ def build_json():
 
     return result
 
+
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
+
 
 def save_json_to_pdf(data, output_path):
     """
@@ -157,6 +160,7 @@ def save_json_to_pdf(data, output_path):
 
     c.drawText(textobject)
     c.save()
+
 
 if __name__ == "__main__":
     j = build_json()

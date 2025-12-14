@@ -69,6 +69,7 @@ async def init_mcp():
     await client.connect()
     return client
 
+
 loop = asyncio.get_event_loop()
 mcp_client = loop.run_until_complete(init_mcp())
 
@@ -81,8 +82,10 @@ async def call_mcp_tool(tool_name: str, params: dict):
 # ============================================================
 # Paths
 # ============================================================
-DOCS_DIR = Path("./docs"); DOCS_DIR.mkdir(exist_ok=True)
-EXPORT_DIR = Path("./exports"); EXPORT_DIR.mkdir(exist_ok=True)
+DOCS_DIR = Path("./docs")
+DOCS_DIR.mkdir(exist_ok=True)
+EXPORT_DIR = Path("./exports")
+EXPORT_DIR.mkdir(exist_ok=True)
 
 PERSIST_DIR = "vectorstore/chroma"
 COLLECTION_NAME = "island_docs"
@@ -105,9 +108,7 @@ collection = chroma_client.get_or_create_collection(COLLECTION_NAME)
 vector_store = ChromaVectorStore(chroma_collection=collection)
 storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
-index = VectorStoreIndex.from_vector_store(
-    vector_store, storage_context, embed_model
-)
+index = VectorStoreIndex.from_vector_store(vector_store, storage_context, embed_model)
 
 query_engine = index.as_retriever(similarity_top_k=3)
 USER_MEMORIES = defaultdict(lambda: ConversationBufferMemory(return_messages=True))
@@ -129,7 +130,10 @@ async def detect_and_call_tools(question: str) -> str:
         result = await call_mcp_tool("run_osm_data_tool", {"query": question})
         ctx += f"\n\n[OSM TOOL OUTPUT]\n{result}"
 
-    if any(word in question.lower() for word in ["weather", "climat", "température", "meteo"]):
+    if any(
+        word in question.lower()
+        for word in ["weather", "climat", "température", "meteo"]
+    ):
         result = await call_mcp_tool("run_climate_forecast_tool", {"query": question})
         ctx += f"\n\n[CLIMATE TOOL OUTPUT]\n{result}"
 
@@ -154,7 +158,7 @@ def generate_with_claude(prompt: str):
 # ============================================================
 def verify_credentials(
     credentials: HTTPBasicCredentials = Depends(security),
-    authorization: str = Header(None)
+    authorization: str = Header(None),
 ):
     if AUTH_MODE == "basic":
         if credentials.username != MVP_USER or credentials.password != MVP_PASS:
@@ -464,6 +468,7 @@ If the intent is unclear:
 
 """
 
+
 @app.post("/chat")
 async def chat(req: ChatRequest, username: str = Depends(verify_credentials)):
     memory = USER_MEMORIES[username]
@@ -475,7 +480,9 @@ async def chat(req: ChatRequest, username: str = Depends(verify_credentials)):
     tool_context = await detect_and_call_tools(question)
     rag_context += tool_context
 
-    history = "\n".join(f"{m.type.capitalize()}: {m.content}" for m in memory.chat_memory.messages[-5:])
+    history = "\n".join(
+        f"{m.type.capitalize()}: {m.content}" for m in memory.chat_memory.messages[-5:]
+    )
 
     prompt = PROMPT_TEMPLATE.format(
         rag_context=rag_context,
@@ -488,13 +495,15 @@ async def chat(req: ChatRequest, username: str = Depends(verify_credentials)):
     memory.chat_memory.add_user_message(question)
     memory.chat_memory.add_ai_message(answer)
 
-    ACTION_LOGS.append({
-        "time": datetime.datetime.now().isoformat(),
-        "user": username,
-        "question": question,
-        "answer": answer,
-        "context": rag_context[:500],
-    })
+    ACTION_LOGS.append(
+        {
+            "time": datetime.datetime.now().isoformat(),
+            "user": username,
+            "question": question,
+            "answer": answer,
+            "context": rag_context[:500],
+        }
+    )
 
     return {"answer": answer, "context_used": rag_context}
 
@@ -518,8 +527,8 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
 
     text = (
         "Plan 24h:\n- Shelter\n- Water\n- Missing persons\n- Medical care\n- Transport\n- Electricity\n- Psych support"
-        if horizon == 24 else
-        "Plan 72h:\n- Restore systems\n- NGOs coordination\n- Debris removal\n- Psych support\n- Critical infra\n- Procurement"
+        if horizon == 24
+        else "Plan 72h:\n- Restore systems\n- NGOs coordination\n- Debris removal\n- Psych support\n- Critical infra\n- Procurement"
     )
 
     filename = EXPORT_DIR / f"plan_{horizon}h_{uuid.uuid4().hex[:6]}.pdf"
@@ -536,7 +545,9 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
 # Upload document
 # ============================================================
 @app.post("/upload_doc")
-def upload_doc(file: UploadFile = File(...), username: str = Depends(verify_credentials)):
+def upload_doc(
+    file: UploadFile = File(...), username: str = Depends(verify_credentials)
+):
     filepath = DOCS_DIR / file.filename
     with open(filepath, "wb") as f:
         f.write(file.file.read())
@@ -556,7 +567,9 @@ def export_logs(username: str = Depends(verify_credentials)):
     filename = EXPORT_DIR / f"logs_{uuid.uuid4().hex[:6]}.csv"
 
     with open(filename, "w", newline="", encoding="utf8") as f:
-        writer = csv.DictWriter(f, fieldnames=["time", "user", "question", "answer", "context"])
+        writer = csv.DictWriter(
+            f, fieldnames=["time", "user", "question", "answer", "context"]
+        )
         writer.writeheader()
 
         for log in ACTION_LOGS:

@@ -195,7 +195,9 @@ def generate_reasoning_with_mistral(user_question: str) -> dict:
     """
     # If no Mistral key, directly use the fallback
     if not MISTRAL_API_KEY:
-        logger.warning("MISTRAL_API_KEY not set. Using default structured reasoning fallback.")
+        logger.warning(
+            "MISTRAL_API_KEY not set. Using default structured reasoning fallback."
+        )
         reasoning_output = _default_structured_reasoning()
     else:
         prompt = REASONING_PROMPT.replace("{user_question}", user_question)
@@ -242,7 +244,10 @@ def generate_reasoning_with_mistral(user_question: str) -> dict:
     ):
         # Force structured mode for planning-like questions
         reasoning_output["response_mode"] = "structured"
-        if not reasoning_output.get("intent") or reasoning_output.get("intent") == "simple_question":
+        if (
+            not reasoning_output.get("intent")
+            or reasoning_output.get("intent") == "simple_question"
+        ):
             reasoning_output["intent"] = "resilience_plan"
 
     return reasoning_output
@@ -251,7 +256,9 @@ def generate_reasoning_with_mistral(user_question: str) -> dict:
 # ============================================================
 # Claude generator
 # ============================================================
-def generate_with_claude(prompt: str, max_tokens: int = 64000, temperature: float = 0.7) -> str:
+def generate_with_claude(
+    prompt: str, max_tokens: int = 64000, temperature: float = 0.7
+) -> str:
     """
     Generate text using Claude Sonnet 4.5 with streaming.
     """
@@ -626,7 +633,9 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
 # Upload documents (to be ingested into RAG offline)
 # ============================================================
 @app.post("/upload_doc")
-def upload_doc(file: UploadFile = File(...), username: str = Depends(verify_credentials)):
+def upload_doc(
+    file: UploadFile = File(...), username: str = Depends(verify_credentials)
+):
     filepath = DOCS_DIR / file.filename
     with open(filepath, "wb") as f:
         f.write(file.file.read())

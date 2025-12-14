@@ -9,6 +9,7 @@ BOOKMARKS_PATH = os.path.expanduser(
 OUTPUT_JSON = "chrome_favorites.json"
 FOLDER_NAME = "Projets"  # ← nom du dossier de favoris que tu veux extraire
 
+
 def find_folder(node, folder_name):
     """Recherche récursive du dossier."""
     if node.get("type") == "folder" and node.get("name") == folder_name:
@@ -20,6 +21,7 @@ def find_folder(node, folder_name):
                 return found
     return None
 
+
 def extract_urls(node):
     """Extract all URLs from a folder."""
     urls = []
@@ -29,6 +31,7 @@ def extract_urls(node):
         for child in node.get("children", []):
             urls.extend(extract_urls(child))
     return urls
+
 
 def main():
     with open(BOOKMARKS_PATH, "r", encoding="utf-8") as f:
@@ -53,6 +56,7 @@ def main():
         json.dump(all_urls, f, ensure_ascii=False, indent=2)
 
     print(f"✅ {len(all_urls)} liens extraits et enregistrés dans {OUTPUT_JSON}")
+
 
 if __name__ == "__main__":
     main()

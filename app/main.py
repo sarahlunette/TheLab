@@ -44,22 +44,25 @@ load_dotenv()
 PERSIST_DIR = "vectorstore/chroma"
 COLLECTION_NAME = "island_docs"
 
-DOCS_DIR = Path('./docs')
-EXPORT_DIR = Path('./exports')
+DOCS_DIR = Path("./docs")
+EXPORT_DIR = Path("./exports")
 DOCS_DIR.mkdir(exist_ok=True)
 EXPORT_DIR.mkdir(exist_ok=True)
 
-API_USER = os.getenv('MVP_USER', 'admin')
-API_PASS = os.getenv('MVP_PASS', 'password')
+API_USER = os.getenv("MVP_USER", "admin")
+API_PASS = os.getenv("MVP_PASS", "password")
 
 # vLLM API endpoint
 VLLM_API_URL = os.getenv("VLLM_API_URL", "http://localhost:8001/v1/completions")
-MODEL_NAME = os.getenv("VLLM_MODEL_NAME", "/mnt/c/Users/sarah/Desktop/TheLab_/models/TinyLlama-1.1B-Chat-v1.0")
+MODEL_NAME = os.getenv(
+    "VLLM_MODEL_NAME",
+    "/mnt/c/Users/sarah/Desktop/TheLab_/models/TinyLlama-1.1B-Chat-v1.0",
+)
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('mvp')
+logger = logging.getLogger("mvp")
 
-app = FastAPI(title='MVP Crisis Chat & Plan (RAG + vLLM)')
+app = FastAPI(title="MVP Crisis Chat & Plan (RAG + vLLM)")
 security = HTTPBasic()
 ACTION_LOGS = []
 
@@ -72,7 +75,9 @@ os.environ["TRANSFORMERS_OFFLINE"] = "1"
 sbert_model_path = "../models/all-MiniLM-L6-v2"
 embed_model = HuggingFaceEmbedding(
     model_name=sbert_model_path,
-    model_kwargs={"device": "cuda" if os.system("nvidia-smi > /dev/null 2>&1") == 0 else "cpu"}
+    model_kwargs={
+        "device": "cuda" if os.system("nvidia-smi > /dev/null 2>&1") == 0 else "cpu"
+    },
 )
 
 chroma_client = PersistentClient(path=PERSIST_DIR)
@@ -87,6 +92,7 @@ query_engine = index.as_retriever(similarity_top_k=3)
 
 MAX_CONTEXT_TOKENS = 1000
 
+
 def query_knowledge_base(question: str) -> str:
     """Retrieve context from vectorstore."""
     retrieved_nodes = query_engine.retrieve(question)
@@ -94,10 +100,12 @@ def query_knowledge_base(question: str) -> str:
     logger.info(f"📚 Retrieved {len(retrieved_nodes)} context chunks from RAG.")
     return context or "No relevant information found."
 
+
 # -----------------
 # Conversation memory
 # -----------------
 USER_MEMORIES = defaultdict(lambda: ConversationBufferMemory(return_messages=True))
+
 
 # -----------------
 # Helper: vLLM generator
@@ -109,17 +117,17 @@ def generate_with_vllm(prompt, max_tokens=1500, temperature=0.7):
         prompt = prompt[:100] + "\n[... truncated for model input ...]"
 
     full_prompt = (
-            "Tu es un assistant IA de gestion de crise et de résilience territoriale. "
-            "Réponds de manière concise, structurée et sans répéter la question.\n\n"
-            f"{prompt.strip()}\n\n"
-            "Réponse :"
+        "Tu es un assistant IA de gestion de crise et de résilience territoriale. "
+        "Réponds de manière concise, structurée et sans répéter la question.\n\n"
+        f"{prompt.strip()}\n\n"
+        "Réponse :"
     )
 
     payload = {
         "model": MODEL_NAME,
         "prompt": full_prompt,
         "max_tokens": max_tokens,
-        "temperature": temperature
+        "temperature": temperature,
     }
 
     print(payload)
@@ -128,13 +136,12 @@ def generate_with_vllm(prompt, max_tokens=1500, temperature=0.7):
     return r.json()["choices"][0]["text"]
 
 
-
-
 # -----------------
 # Pydantic model
 # -----------------
 class ChatRequest(BaseModel):
     question: str
+
 
 # -----------------
 # Auth helper
@@ -143,6 +150,7 @@ def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     if credentials.username != API_USER or credentials.password != API_PASS:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return credentials.username
+
 
 # -----------------
 # Chat endpoint
@@ -153,10 +161,12 @@ def chat(request: ChatRequest, username: str = Depends(verify_credentials)):
     memory = USER_MEMORIES[username]
     rag_context = query_knowledge_base(input_text)
 
-    history_text = "\n".join([
-        f"{msg.type.capitalize()}: {msg.content}"
-        for msg in memory.chat_memory.messages[-5:]
-    ])
+    history_text = "\n".join(
+        [
+            f"{msg.type.capitalize()}: {msg.content}"
+            for msg in memory.chat_memory.messages[-5:]
+        ]
+    )
 
     # Full prompt (exactly as your version)
     prompt = f"""
@@ -289,19 +299,22 @@ def chat(request: ChatRequest, username: str = Depends(verify_credentials)):
     memory.chat_memory.add_ai_message(answer)
 
     # 🔹 Log
-    ACTION_LOGS.append({
-        'time': datetime.datetime.now().isoformat(),
-        'username': username,
-        'question': input_text,
-        'context_used': rag_context[:1000],
-        'answer': answer
-    })
+    ACTION_LOGS.append(
+        {
+            "time": datetime.datetime.now().isoformat(),
+            "username": username,
+            "question": input_text,
+            "context_used": rag_context[:1000],
+            "answer": answer,
+        }
+    )
 
     return {
         "answer": answer,
         "context_used": rag_context,
-        "conversation_turns": len(memory.chat_memory.messages) // 2
+        "conversation_turns": len(memory.chat_memory.messages) // 2,
     }
+
 
 # -----------------
 # Reset + History Endpoints
@@ -311,10 +324,15 @@ def reset_chat(username: str = Depends(verify_credentials)):
     USER_MEMORIES[username].clear()
     return {"message": f"Conversation reset for {username}."}
 
+
 @app.get("/chat/history")
 def get_history(username: str = Depends(verify_credentials)):
     memory = USER_MEMORIES[username]
-    return [{"role": msg.type, "content": msg.content} for msg in memory.chat_memory.messages]
+    return [
+        {"role": msg.type, "content": msg.content}
+        for msg in memory.chat_memory.messages
+    ]
+
 
 # -----------------
 # Plan generation
@@ -351,23 +369,31 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
         c.drawString(50, 800 - i * 20, line)
     c.save()
 
-    ACTION_LOGS.append({
-        'time': datetime.datetime.now().isoformat(),
-        'plan_horizon': horizon,
-        'file': str(filename)
-    })
+    ACTION_LOGS.append(
+        {
+            "time": datetime.datetime.now().isoformat(),
+            "plan_horizon": horizon,
+            "file": str(filename),
+        }
+    )
 
-    return FileResponse(str(filename), media_type='application/pdf', filename=f"plan_{horizon}h.pdf")
+    return FileResponse(
+        str(filename), media_type="application/pdf", filename=f"plan_{horizon}h.pdf"
+    )
+
 
 # -----------------
 # Upload document
 # -----------------
 @app.post("/upload_doc")
-def upload_doc(file: UploadFile = File(...), username: str = Depends(verify_credentials)):
+def upload_doc(
+    file: UploadFile = File(...), username: str = Depends(verify_credentials)
+):
     filepath = DOCS_DIR / file.filename
-    with open(filepath, 'wb') as f:
+    with open(filepath, "wb") as f:
         f.write(file.file.read())
     return {"message": f"Document {file.filename} uploaded successfully."}
+
 
 # -----------------
 # Logs
@@ -376,15 +402,41 @@ def upload_doc(file: UploadFile = File(...), username: str = Depends(verify_cred
 def get_logs(username: str = Depends(verify_credentials)):
     return ACTION_LOGS
 
+
 @app.get("/export_logs_csv")
 def export_logs_csv(username: str = Depends(verify_credentials)):
     filename = EXPORT_DIR / f"logs_{uuid.uuid4().hex[:6]}.csv"
-    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=['time', 'username', 'question', 'context_used', 'answer', 'plan_horizon', 'file'])
+    with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.DictWriter(
+            csvfile,
+            fieldnames=[
+                "time",
+                "username",
+                "question",
+                "context_used",
+                "answer",
+                "plan_horizon",
+                "file",
+            ],
+        )
         writer.writeheader()
         for log in ACTION_LOGS:
-            writer.writerow({k: log.get(k, "") for k in ['time', 'username', 'question', 'context_used', 'answer', 'plan_horizon', 'file']})
-    return FileResponse(str(filename), media_type='text/csv', filename=filename.name)
+            writer.writerow(
+                {
+                    k: log.get(k, "")
+                    for k in [
+                        "time",
+                        "username",
+                        "question",
+                        "context_used",
+                        "answer",
+                        "plan_horizon",
+                        "file",
+                    ]
+                }
+            )
+    return FileResponse(str(filename), media_type="text/csv", filename=filename.name)
+
 
 # -----------------
 # 🧩 MCP tool trigger endpoint
@@ -393,8 +445,11 @@ import requests
 
 MCP_URL = "http://localhost:8100"
 
+
 @app.post("/tool")
-def call_mcp_tool(tool_name: str, params: dict, username: str = Depends(verify_credentials)):
+def call_mcp_tool(
+    tool_name: str, params: dict, username: str = Depends(verify_credentials)
+):
     """
     Call a specific tool hosted on the MCP server (e.g. osm_data_collector or climate_forecast_collector).
     """

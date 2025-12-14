@@ -98,9 +98,7 @@ ACTION_LOGS = []
 # ============================================================
 logger.info("Initializing RAG with Qdrant vectorstore...")
 
-embed_model = HuggingFaceEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 qdrant_client = QdrantClient(url=QDRANT_URL)
 
@@ -205,6 +203,7 @@ User message:
 "{user_question}"
 """
 
+
 def _default_structured_reasoning() -> dict:
     """
     Default reasoning output when Mistral is unavailable or fails.
@@ -237,7 +236,9 @@ def generate_reasoning_with_mistral(user_question: str) -> dict:
 
     # If Mistral key missing → fallback immediately
     if not MISTRAL_API_KEY:
-        logger.warning("MISTRAL_API_KEY not set. Using default structured reasoning fallback.")
+        logger.warning(
+            "MISTRAL_API_KEY not set. Using default structured reasoning fallback."
+        )
         return _default_structured_reasoning()
 
     # Build prompt
@@ -327,12 +328,27 @@ def generate_reasoning_with_mistral(user_question: str) -> dict:
     lower_q = user_question.lower()
 
     planning_keywords = [
-        "plan", "planning", "prioritisation", "prioritization",
-        "priorities", "detailed", "détail", "timeline",
-        "roadmap", "strategie", "strategy",
-        "reconstruction", "resilience", "resilient",
-        "assessment", "multi-sector", "project list",
-        "programme", "program", "phasing", "stabilization",
+        "plan",
+        "planning",
+        "prioritisation",
+        "prioritization",
+        "priorities",
+        "detailed",
+        "détail",
+        "timeline",
+        "roadmap",
+        "strategie",
+        "strategy",
+        "reconstruction",
+        "resilience",
+        "resilient",
+        "assessment",
+        "multi-sector",
+        "project list",
+        "programme",
+        "program",
+        "phasing",
+        "stabilization",
     ]
 
     if any(w in lower_q for w in planning_keywords):
@@ -341,7 +357,18 @@ def generate_reasoning_with_mistral(user_question: str) -> dict:
             reasoning_output["intent"] = "resilience_plan"
 
     # If user clearly asks for coordinates → geospatial intent
-    if any(k in lower_q for k in ["lat", "lon", "latitude", "longitude", "coordinates", "radius", "buffer"]):
+    if any(
+        k in lower_q
+        for k in [
+            "lat",
+            "lon",
+            "latitude",
+            "longitude",
+            "coordinates",
+            "radius",
+            "buffer",
+        ]
+    ):
         if entities["lon"] is not None and entities["lat"] is not None:
             reasoning_output["intent"] = "geospatial_request"
             reasoning_output["response_mode"] = "short"
@@ -349,11 +376,12 @@ def generate_reasoning_with_mistral(user_question: str) -> dict:
     return reasoning_output
 
 
-
 # ============================================================
 # Claude generator
 # ============================================================
-def generate_with_claude(prompt: str, max_tokens: int = 64000, temperature: float = 0.7) -> str:
+def generate_with_claude(
+    prompt: str, max_tokens: int = 64000, temperature: float = 0.7
+) -> str:
     """
     Generate text using Claude Sonnet 4.5 with streaming.
     """
@@ -441,7 +469,7 @@ def chat(req: ChatRequest, username: str = Depends(verify_credentials)):
             lon=entities["lon"],
             lat=entities["lat"],
             date=entities["date"],
-            radius=entities.get("radius") or 10
+            radius=entities.get("radius") or 10,
         )
 
         # Because vectorstore was updated → refresh RAG
@@ -450,8 +478,7 @@ def chat(req: ChatRequest, username: str = Depends(verify_credentials)):
 
     # 3. Conversation history (last 5 messages)
     history = "\n".join(
-        f"{m.type.capitalize()}: {m.content}"
-        for m in memory.chat_memory.messages[-5:]
+        f"{m.type.capitalize()}: {m.content}" for m in memory.chat_memory.messages[-5:]
     )
 
     # 4. Reasoning metadata summary (short)
@@ -727,16 +754,13 @@ Now, based on all of the above, answer the CURRENT USER MESSAGE.
         "answer": answer,
         "context_used": rag_context,
         "reasoning": reasoning_output,
-
         # extracted structured fields
         "extracted_date": entities.get("date"),
         "extracted_lon": entities.get("lon"),
         "extracted_lat": entities.get("lat"),
         "extracted_radius": entities.get("radius"),
-
         # result of MCP tool (if triggered)
         "geospatial_data_used": geospatial_result,
-
         "conversation_turns": len(memory.chat_memory.messages) // 2,
     }
 
@@ -793,7 +817,9 @@ def plan(horizon: int = 24, username: str = Depends(verify_credentials)):
 # Upload documents (to be ingested into RAG offline by build_vectorstore.py)
 # ============================================================
 @app.post("/upload_doc")
-def upload_doc(file: UploadFile = File(...), username: str = Depends(verify_credentials)):
+def upload_doc(
+    file: UploadFile = File(...), username: str = Depends(verify_credentials)
+):
     filepath = DOCS_DIR / file.filename
     with open(filepath, "wb") as f:
         f.write(file.file.read())

@@ -13,7 +13,7 @@ async def fetch_earth_engine_data(
     lat: float,
     recent_start: str,
     radius: int = 10,
-    thresholdFactor: float = 2.5
+    thresholdFactor: float = 2.5,
 ):
     """
     Calls your backend ML API with geospatial parameters.
@@ -52,7 +52,7 @@ async def fetch_earth_engine_data(
                 if resp.status != 200:
                     api_result = {
                         "error": f"API returned {resp.status}",
-                        "details": await resp.text()
+                        "details": await resp.text(),
                     }
                 else:
                     api_result = await resp.json()
@@ -69,10 +69,7 @@ async def fetch_earth_engine_data(
     filename = docs_dir / f"geodata_{timestamp}.json"
 
     with open(filename, "w", encoding="utf-8") as f:
-        json.dump({
-            "input": payload,
-            "api_response": api_result
-        }, f, indent=2)
+        json.dump({"input": payload, "api_response": api_result}, f, indent=2)
 
     # ------------------------------------------------------------
     # 4. Trigger vectorstore rebuild
@@ -81,9 +78,10 @@ async def fetch_earth_engine_data(
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            "python", build_script,
+            "python",
+            build_script,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
         rebuild_log = stdout.decode() + "\n" + stderr.decode()
@@ -102,5 +100,5 @@ async def fetch_earth_engine_data(
         "radius": radius,
         "thresholdFactor": thresholdFactor,
         "vectorstore_update_log": rebuild_log,
-        "message": "Data saved and vectorstore updated."
+        "message": "Data saved and vectorstore updated.",
     }
